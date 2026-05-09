@@ -62,6 +62,10 @@ public class MainActivity extends Activity implements SensorEventListener {
     private NumberPicker minutePicker;
     private SeekBar thresholdSeekBar;
     private Button[] dayButtons;
+    private Button[] snoozeMinuteButtons;
+    private Button[] maxSnoozeButtons;
+    private Button[] volumeRampButtons;
+    private Button[] vibrationButtons;
     private TextView thresholdValueText;
     private TextView currentLightText;
     private TextView calibrationStatusText;
@@ -72,12 +76,17 @@ public class MainActivity extends Activity implements SensorEventListener {
     private TextView selectedRingtoneText;
     private Button exactAlarmSettingsButton;
     private Button fullScreenSettingsButton;
+    private Button saveAlarmButton;
     private LinearLayout alarmListLayout;
 
     private SensorManager sensorManager;
     private Sensor lightSensor;
     private long editingAlarmId = NO_EDITING_ALARM;
     private int selectedRepeatDays = AlarmPreferences.DAYS_ALL;
+    private int selectedSnoozeMinutes = AlarmConfig.DEFAULT_SNOOZE_MINUTES;
+    private int selectedMaxSnoozes = AlarmConfig.DEFAULT_MAX_SNOOZES;
+    private int selectedVolumeRampSeconds = AlarmConfig.DEFAULT_VOLUME_RAMP_SECONDS;
+    private int selectedVibrationPattern = AlarmConfig.DEFAULT_VIBRATION_PATTERN;
     private String selectedRingtoneUri;
     private String selectedRingtoneName;
     private float latestLux = -1f;
@@ -265,6 +274,64 @@ public class MainActivity extends Activity implements SensorEventListener {
         ringtoneRow.addView(chooseRingtoneButton, new LinearLayout.LayoutParams(dp(96), dp(42)));
         formPanel.addView(ringtoneRow, blockParams(4));
 
+        formPanel.addView(label("Snooze duration"));
+        snoozeMinuteButtons = new Button[AlarmConfig.SNOOZE_MINUTE_OPTIONS.length];
+        formPanel.addView(optionRow(
+                snoozeMinuteButtons,
+                AlarmConfig.SNOOZE_MINUTE_OPTIONS,
+                new String[]{"Off", "5m", "10m", "15m"},
+                value -> {
+                    selectedSnoozeMinutes = value;
+                    if (selectedSnoozeMinutes == 0) {
+                        selectedMaxSnoozes = 0;
+                    } else if (selectedMaxSnoozes == 0) {
+                        selectedMaxSnoozes = AlarmConfig.DEFAULT_MAX_SNOOZES;
+                    }
+                    updateWakeOptionButtons();
+                }
+        ), blockParams(4));
+
+        formPanel.addView(label("Snooze limit"));
+        maxSnoozeButtons = new Button[AlarmConfig.MAX_SNOOZE_OPTIONS.length];
+        formPanel.addView(optionRow(
+                maxSnoozeButtons,
+                AlarmConfig.MAX_SNOOZE_OPTIONS,
+                new String[]{"Off", "1", "2", "3"},
+                value -> {
+                    selectedMaxSnoozes = value;
+                    if (selectedMaxSnoozes == 0) {
+                        selectedSnoozeMinutes = 0;
+                    } else if (selectedSnoozeMinutes == 0) {
+                        selectedSnoozeMinutes = AlarmConfig.DEFAULT_SNOOZE_MINUTES;
+                    }
+                    updateWakeOptionButtons();
+                }
+        ), blockParams(4));
+
+        formPanel.addView(label("Volume ramp"));
+        volumeRampButtons = new Button[AlarmConfig.VOLUME_RAMP_OPTIONS.length];
+        formPanel.addView(optionRow(
+                volumeRampButtons,
+                AlarmConfig.VOLUME_RAMP_OPTIONS,
+                new String[]{"Off", "15s", "30s", "60s"},
+                value -> {
+                    selectedVolumeRampSeconds = value;
+                    updateWakeOptionButtons();
+                }
+        ), blockParams(4));
+
+        formPanel.addView(label("Vibration"));
+        vibrationButtons = new Button[AlarmConfig.VIBRATION_PATTERN_OPTIONS.length];
+        formPanel.addView(optionRow(
+                vibrationButtons,
+                AlarmConfig.VIBRATION_PATTERN_OPTIONS,
+                new String[]{"Off", "Pulse", "Steady", "Urgent"},
+                value -> {
+                    selectedVibrationPattern = value;
+                    updateWakeOptionButtons();
+                }
+        ), blockParams(4));
+
         formPanel.addView(label("Light target"));
         thresholdValueText = text("", 28, Typeface.BOLD, neonCyan);
         thresholdValueText.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -321,9 +388,9 @@ public class MainActivity extends Activity implements SensorEventListener {
         currentLabel.setGravity(Gravity.CENTER_HORIZONTAL);
         formPanel.addView(currentLabel);
 
-        Button saveButton = primaryButton("Save alarm");
-        saveButton.setOnClickListener(view -> saveFormAlarm());
-        formPanel.addView(saveButton, blockParams(16));
+        saveAlarmButton = primaryButton("Add alarm");
+        saveAlarmButton.setOnClickListener(view -> saveFormAlarm());
+        formPanel.addView(saveAlarmButton, blockParams(16));
         root.addView(formPanel, blockParams(16));
 
         LinearLayout alarmsPanel = panel(neonCyan);
@@ -339,10 +406,16 @@ public class MainActivity extends Activity implements SensorEventListener {
     private void loadDefaultForm() {
         editingAlarmId = NO_EDITING_ALARM;
         formTitleText.setText(R.string.form_new_alarm);
+        updateSaveButtonText();
         hourPicker.setValue(AlarmPreferences.DEFAULT_HOUR);
         minutePicker.setValue(AlarmPreferences.DEFAULT_MINUTE);
         selectedRepeatDays = AlarmPreferences.DAYS_ALL;
         updateDayButtons();
+        selectedSnoozeMinutes = AlarmConfig.DEFAULT_SNOOZE_MINUTES;
+        selectedMaxSnoozes = AlarmConfig.DEFAULT_MAX_SNOOZES;
+        selectedVolumeRampSeconds = AlarmConfig.DEFAULT_VOLUME_RAMP_SECONDS;
+        selectedVibrationPattern = AlarmConfig.DEFAULT_VIBRATION_PATTERN;
+        updateWakeOptionButtons();
         selectedRingtoneUri = null;
         selectedRingtoneName = null;
         updateSelectedRingtone();
@@ -352,10 +425,16 @@ public class MainActivity extends Activity implements SensorEventListener {
     private void loadAlarmIntoForm(AlarmConfig alarm) {
         editingAlarmId = alarm.id;
         formTitleText.setText(R.string.form_edit_alarm);
+        updateSaveButtonText();
         hourPicker.setValue(alarm.hour);
         minutePicker.setValue(alarm.minute);
         selectedRepeatDays = alarm.repeatDays;
         updateDayButtons();
+        selectedSnoozeMinutes = alarm.snoozeMinutes;
+        selectedMaxSnoozes = alarm.maxSnoozes;
+        selectedVolumeRampSeconds = alarm.volumeRampSeconds;
+        selectedVibrationPattern = alarm.vibrationPattern;
+        updateWakeOptionButtons();
         selectedRingtoneUri = alarm.ringtoneUri;
         selectedRingtoneName = alarm.ringtoneName;
         updateSelectedRingtone();
@@ -363,8 +442,9 @@ public class MainActivity extends Activity implements SensorEventListener {
     }
 
     private void saveFormAlarm() {
+        boolean editingExistingAlarm = editingAlarmId != NO_EDITING_ALARM;
         AlarmConfig alarm = new AlarmConfig(
-                editingAlarmId == NO_EDITING_ALARM ? AlarmStore.newAlarmId(this) : editingAlarmId,
+                editingExistingAlarm ? editingAlarmId : AlarmStore.newAlarmId(this),
                 hourPicker.getValue(),
                 minutePicker.getValue(),
                 true,
@@ -372,7 +452,13 @@ public class MainActivity extends Activity implements SensorEventListener {
                 0L,
                 currentThresholdLux(),
                 selectedRingtoneUri,
-                selectedRingtoneName
+                selectedRingtoneName,
+                selectedSnoozeMinutes,
+                selectedMaxSnoozes,
+                0,
+                0L,
+                selectedVolumeRampSeconds,
+                selectedVibrationPattern
         );
 
         if (!AlarmScheduler.canScheduleExactAlarms(this)) {
@@ -381,6 +467,11 @@ public class MainActivity extends Activity implements SensorEventListener {
             updateAlarmList();
             updateAlarmStatus();
             updatePermissionStatus();
+            if (editingExistingAlarm) {
+                loadAlarmIntoForm(alarm);
+            } else {
+                switchToNewAlarmMode();
+            }
             Toast.makeText(this, "Allow Alarms & reminders, then enable the alarm.", Toast.LENGTH_LONG).show();
             openExactAlarmSettings();
             return;
@@ -395,9 +486,26 @@ public class MainActivity extends Activity implements SensorEventListener {
             Toast.makeText(this, "Alarm set for " + AlarmPreferences.formatDateTime(this, alarm.nextTriggerMillis()), Toast.LENGTH_LONG).show();
         }
 
-        loadAlarmIntoForm(alarm);
+        if (editingExistingAlarm) {
+            loadAlarmIntoForm(alarm);
+        } else {
+            switchToNewAlarmMode();
+        }
         updateAlarmList();
         updateAlarmStatus();
+    }
+
+    private void switchToNewAlarmMode() {
+        editingAlarmId = NO_EDITING_ALARM;
+        formTitleText.setText(R.string.form_new_alarm);
+        updateSaveButtonText();
+    }
+
+    private void updateSaveButtonText() {
+        if (saveAlarmButton == null) {
+            return;
+        }
+        saveAlarmButton.setText(editingAlarmId == NO_EDITING_ALARM ? "Add alarm" : "Save changes");
     }
 
     private void updateAlarmList() {
@@ -463,8 +571,13 @@ public class MainActivity extends Activity implements SensorEventListener {
         if (alarm.skipNextTriggerMillis > 0L) {
             card.addView(text("Skipped: " + AlarmPreferences.formatDateTime(this, alarm.skipNextTriggerMillis), 13, Typeface.NORMAL, neonAmber), blockParams(4));
         }
+        if (alarm.snoozeUntilMillis > 0L) {
+            card.addView(text("Snoozed until: " + AlarmPreferences.formatDateTime(this, alarm.snoozeUntilMillis), 13, Typeface.NORMAL, neonAmber), blockParams(4));
+        }
         card.addView(text("Light target: " + alarm.thresholdLux + " lux", 13, Typeface.NORMAL, neonCyan), blockParams(4));
         card.addView(text("Tone: " + alarm.ringtoneLabel(), 13, Typeface.NORMAL, mutedColor), blockParams(4));
+        card.addView(text("Snooze: " + alarm.snoozeLabel(), 13, Typeface.NORMAL, mutedColor), blockParams(4));
+        card.addView(text("Ramp: " + alarm.volumeRampLabel() + " / Vibration: " + alarm.vibrationLabel(), 13, Typeface.NORMAL, mutedColor), blockParams(4));
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
@@ -563,6 +676,47 @@ public class MainActivity extends Activity implements SensorEventListener {
             boolean selected = (selectedRepeatDays & (1 << index)) != 0;
             dayButtons[index].setTextColor(selected ? backgroundColor : textColor);
             dayButtons[index].setBackground(strokedBackground(
+                    selected ? neonCyan : Color.TRANSPARENT,
+                    selected ? neonMagenta : neonCyan,
+                    8,
+                    1
+            ));
+        }
+    }
+
+    private void updateWakeOptionButtons() {
+        updateOptionButtons(snoozeMinuteButtons, AlarmConfig.SNOOZE_MINUTE_OPTIONS, selectedSnoozeMinutes);
+        updateOptionButtons(maxSnoozeButtons, AlarmConfig.MAX_SNOOZE_OPTIONS, selectedMaxSnoozes);
+        updateOptionButtons(volumeRampButtons, AlarmConfig.VOLUME_RAMP_OPTIONS, selectedVolumeRampSeconds);
+        updateOptionButtons(vibrationButtons, AlarmConfig.VIBRATION_PATTERN_OPTIONS, selectedVibrationPattern);
+    }
+
+    private LinearLayout optionRow(Button[] buttons, int[] values, String[] labels, OptionSelectListener listener) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (int index = 0; index < buttons.length; index++) {
+            final int value = values[index];
+            Button button = miniButton(labels[index], neonCyan);
+            button.setOnClickListener(view -> listener.onSelected(value));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(42), 1);
+            if (index > 0) {
+                params.setMarginStart(dp(4));
+            }
+            row.addView(button, params);
+            buttons[index] = button;
+        }
+        return row;
+    }
+
+    private void updateOptionButtons(Button[] buttons, int[] values, int selectedValue) {
+        if (buttons == null) {
+            return;
+        }
+
+        for (int index = 0; index < buttons.length; index++) {
+            boolean selected = values[index] == selectedValue;
+            buttons[index].setTextColor(selected ? backgroundColor : textColor);
+            buttons[index].setBackground(strokedBackground(
                     selected ? neonCyan : Color.TRANSPARENT,
                     selected ? neonMagenta : neonCyan,
                     8,
@@ -897,6 +1051,10 @@ public class MainActivity extends Activity implements SensorEventListener {
 
     private String appendStatus(String current, String addition) {
         return current.isEmpty() ? addition : current + " " + addition;
+    }
+
+    private interface OptionSelectListener {
+        void onSelected(int value);
     }
 
     private int dp(int value) {

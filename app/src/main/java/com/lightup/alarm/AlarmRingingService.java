@@ -36,6 +36,15 @@ public class AlarmRingingService extends Service {
     private boolean ringing;
     private AlarmConfig activeAlarm;
     private long activeAlarmId = -1L;
+    private long volumeRampStartedAt;
+    private int volumeRampDurationMs;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable volumeRampUpdater = new Runnable() {
+        @Override
+        public void run() {
+            updateVolumeRamp();
+        }
+    };
 
     static void createAlarmChannel(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -88,6 +97,7 @@ public class AlarmRingingService extends Service {
 
     @Override
     public void onDestroy() {
+        handler.removeCallbacks(volumeRampUpdater);
         stopSound();
         stopVibration();
         releaseWakeLock();
@@ -188,6 +198,7 @@ public class AlarmRingingService extends Service {
             mediaPlayer.setDataSource(this, soundUri);
             mediaPlayer.setLooping(true);
             mediaPlayer.prepare();
+            prepareVolumeRamp();
             mediaPlayer.start();
             return true;
         } catch (IOException | RuntimeException exception) {
@@ -197,6 +208,7 @@ public class AlarmRingingService extends Service {
     }
 
     private void stopSound() {
+        handler.removeCallbacks(volumeRampUpdater);
         if (mediaPlayer == null) {
             return;
         }
@@ -211,16 +223,68 @@ public class AlarmRingingService extends Service {
         mediaPlayer = null;
     }
 
+    private void prepareVolumeRamp() {
+        int rampSeconds = activeAlarm == null ? 0 : activeAlarm.volumeRampSeconds;
+        if (rampSeconds <= 0) {
+            mediaPlayer.setVolume(1.0f, 1.0f);
+            return;
+        }
+
+        volumeRampStartedAt = System.currentTimeMillis();
+        volumeRampDurationMs = rampSeconds * 1000;
+        mediaPlayer.setVolume(0.12f, 0.12f);
+        handler.removeCallbacks(volumeRampUpdater);
+        handler.postDelayed(volumeRampUpdater, 1000L);
+    }
+
+    private void updateVolumeRamp() {
+        if (mediaPlayer == null || volumeRampDurationMs <= 0) {
+            return;
+        }
+
+        float elapsed = Math.max(0f, System.currentTimeMillis() - volumeRampStartedAt);
+        float progress = Math.min(1.0f, elapsed / volumeRampDurationMs);
+        float volume = 0.12f + 0.88f * progress;
+        try {
+            mediaPlayer.setVolume(volume, volume);
+        } catch (IllegalStateException ignored) {
+            return;
+        }
+
+        if (progress < 1.0f) {
+            handler.postDelayed(volumeRampUpdater, 1000L);
+        }
+    }
+
     private void startVibration() {
         if (vibrator == null || !vibrator.hasVibrator()) {
             return;
         }
 
-        long[] pattern = new long[]{0L, 700L, 450L, 700L, 1200L};
+        long[] pattern = vibrationPattern();
+        if (pattern.length == 0) {
+            return;
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
         } else {
             vibrator.vibrate(pattern, 0);
+        }
+    }
+
+    private long[] vibrationPattern() {
+        int pattern = activeAlarm == null ? AlarmConfig.DEFAULT_VIBRATION_PATTERN : activeAlarm.vibrationPattern;
+        switch (pattern) {
+            case AlarmConfig.VIBRATION_OFF:
+                return new long[0];
+            case AlarmConfig.VIBRATION_PULSE:
+                return new long[]{0L, 450L, 700L};
+            case AlarmConfig.VIBRATION_STEADY:
+                return new long[]{0L, 1200L, 300L};
+            case AlarmConfig.VIBRATION_URGENT:
+            default:
+                return new long[]{0L, 300L, 160L, 300L, 160L, 850L};
         }
     }
 

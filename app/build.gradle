@@ -10,8 +10,8 @@ android {
         applicationId "com.lightup.alarm"
         minSdk 23
         targetSdk 35
-        versionCode 3
-        versionName "0.3.0"
+        versionCode 4
+        versionName "0.4.0"
     }
 
     compileOptions {
@@ -28,4 +28,5 @@ android.applicationVariants.configureEach { variant ->
 
 dependencies {
     testImplementation "junit:junit:4.13.2"
+    testImplementation "org.json:json:20240303"
 }

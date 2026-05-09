@@ -9,6 +9,7 @@ import android.os.Build;
 final class AlarmScheduler {
     static final String ACTION_FIRE_ALARM = "com.lightup.alarm.action.FIRE_ALARM";
     static final String EXTRA_ALARM_ID = "com.lightup.alarm.extra.ALARM_ID";
+    static final String EXTRA_SNOOZE_ALARM = "com.lightup.alarm.extra.SNOOZE_ALARM";
 
     private static final int FIRE_ALARM_SALT = 4100;
     private static final int SHOW_ALARM_SALT = 4101;
@@ -31,6 +32,14 @@ final class AlarmScheduler {
     }
 
     static boolean schedule(Context context, AlarmConfig alarm, long triggerAtMillis) {
+        return scheduleInternal(context, alarm, triggerAtMillis, false);
+    }
+
+    static boolean scheduleSnooze(Context context, AlarmConfig alarm, long triggerAtMillis) {
+        return scheduleInternal(context, alarm, triggerAtMillis, true);
+    }
+
+    private static boolean scheduleInternal(Context context, AlarmConfig alarm, long triggerAtMillis, boolean snoozeAlarm) {
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (alarmManager == null) {
             return false;
@@ -40,7 +49,7 @@ final class AlarmScheduler {
             return false;
         }
 
-        PendingIntent operation = fireAlarmIntent(context, alarm.id, PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent operation = fireAlarmIntent(context, alarm.id, PendingIntent.FLAG_UPDATE_CURRENT, snoozeAlarm);
         PendingIntent showIntent = showAlarmIntent(context, alarm.id);
         AlarmManager.AlarmClockInfo alarmClockInfo =
                 new AlarmManager.AlarmClockInfo(triggerAtMillis, showIntent);
@@ -62,7 +71,7 @@ final class AlarmScheduler {
 
     static void cancel(Context context, long alarmId) {
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        PendingIntent operation = fireAlarmIntent(context, alarmId, PendingIntent.FLAG_NO_CREATE);
+        PendingIntent operation = fireAlarmIntent(context, alarmId, PendingIntent.FLAG_NO_CREATE, false);
 
         if (alarmManager != null && operation != null) {
             alarmManager.cancel(operation);
@@ -70,10 +79,11 @@ final class AlarmScheduler {
         }
     }
 
-    private static PendingIntent fireAlarmIntent(Context context, long alarmId, int flags) {
+    private static PendingIntent fireAlarmIntent(Context context, long alarmId, int flags, boolean snoozeAlarm) {
         Intent intent = new Intent(context, AlarmReceiver.class);
         intent.setAction(ACTION_FIRE_ALARM);
         intent.putExtra(EXTRA_ALARM_ID, alarmId);
+        intent.putExtra(EXTRA_SNOOZE_ALARM, snoozeAlarm);
         return PendingIntent.getBroadcast(
                 context,
                 requestCode(alarmId, FIRE_ALARM_SALT),

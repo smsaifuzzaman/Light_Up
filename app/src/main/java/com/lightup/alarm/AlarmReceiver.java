@@ -18,13 +18,19 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
 
+        boolean snoozeAlarm = intent.getBooleanExtra(AlarmScheduler.EXTRA_SNOOZE_ALARM, false);
         alarm.skipNextTriggerMillis = 0L;
+        if (snoozeAlarm) {
+            alarm.snoozeUntilMillis = 0L;
+        } else {
+            alarm.clearSnoozeSession();
+        }
+
         if (alarm.isRepeating()) {
             long nextTrigger = alarm.nextTriggerMillis(System.currentTimeMillis() + 60_000L);
             AlarmScheduler.schedule(context, alarm, nextTrigger);
             AlarmStore.saveAlarm(context, alarm);
         } else {
-            alarm.enabled = false;
             AlarmStore.saveAlarm(context, alarm);
         }
 

@@ -23,6 +23,7 @@ After downloading `LightUp-debug.apk`, open the downloaded file on the Android d
 - Uses digital time controls instead of an analog clock picker.
 - Supports custom alarm audio by selecting an MP3 or other audio file from the device, including ringtone preview.
 - Configurable alarm time, weekday repeats, skip-next, and light threshold from 0-500 lux.
+- Per-alarm wake options for limited snooze, alarm volume ramp-up, and vibration pattern.
 - Guided light calibration can sample a dark room and lights-on reading, then apply a recommended threshold.
 - Reschedules enabled alarms after reboot, app update, time change, or time zone change.
 - Manual long-press fallback for devices without an ambient light sensor.
@@ -78,8 +79,9 @@ adb install app/build/outputs/apk/debug/LightUp-debug.apk
 4. On Android 14 or newer, use **Alarm display settings** if the app says full-screen alarm display is disabled.
 5. Pick an alarm time.
 6. Choose repeat days. Leaving every day off creates a one-time alarm.
-7. Choose a light target manually, or use **Calibration** to sample dark and lights-on readings.
-8. Tap **Set alarm**.
+7. Choose ringtone, snooze, volume ramp, and vibration options.
+8. Choose a light target manually, or use **Calibration** to sample dark and lights-on readings.
+9. Tap **Add alarm**.
 
 When the alarm rings, turn on a light or shine light at the top edge of the phone until the progress bar fills.
 
@@ -99,6 +101,7 @@ app/src/main/java/com/lightup/alarm/
   AlarmPreferences.java        Local alarm settings
   BootReceiver.java            Alarm rescheduling after system events
 app/src/test/java/com/lightup/alarm/
+  AlarmConfigTest.java         Alarm model and migration unit tests
   AlarmPreferencesTest.java    Scheduling and repeat-rule unit tests
 scripts/
   build.ps1                    Windows helper for local builds

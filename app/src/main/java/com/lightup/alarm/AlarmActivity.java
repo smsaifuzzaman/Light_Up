@@ -43,8 +43,10 @@ public class AlarmActivity extends Activity implements SensorEventListener {
     private TextView currentLuxText;
     private TextView statusText;
     private ProgressBar progressBar;
+    private Button snoozeButton;
     private Button emergencyButton;
 
+    private AlarmConfig activeAlarm;
     private int thresholdLux;
     private long alarmId = -1L;
     private long aboveThresholdSince = -1L;
@@ -70,14 +72,15 @@ public class AlarmActivity extends Activity implements SensorEventListener {
         configureAlarmWindow();
 
         alarmId = getIntent().getLongExtra(AlarmScheduler.EXTRA_ALARM_ID, -1L);
-        AlarmConfig alarm = AlarmStore.getAlarm(this, alarmId);
-        thresholdLux = alarm == null ? AlarmPreferences.DEFAULT_THRESHOLD_LUX : alarm.thresholdLux;
+        activeAlarm = AlarmStore.getAlarm(this, alarmId);
+        thresholdLux = activeAlarm == null ? AlarmPreferences.DEFAULT_THRESHOLD_LUX : activeAlarm.thresholdLux;
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
             lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
         }
 
         setContentView(createContentView());
+        updateSnoozeButton();
         if (lightSensor == null) {
             statusText.setText(R.string.alarm_no_light_sensor);
             emergencyButton.setVisibility(View.VISIBLE);
@@ -179,6 +182,19 @@ public class AlarmActivity extends Activity implements SensorEventListener {
         note.setPadding(0, dp(18), 0, dp(24));
         root.addView(note);
 
+        snoozeButton = new Button(this);
+        snoozeButton.setAllCaps(false);
+        snoozeButton.setTextColor(textColor);
+        snoozeButton.setTextSize(16);
+        snoozeButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        snoozeButton.setBackground(buttonBackground());
+        snoozeButton.setVisibility(View.GONE);
+        snoozeButton.setOnClickListener(view -> snoozeAlarmAndFinish());
+        root.addView(snoozeButton, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(54)
+        ));
+
         emergencyButton = new Button(this);
         emergencyButton.setAllCaps(false);
         emergencyButton.setText(R.string.alarm_hold_to_stop);
@@ -247,6 +263,58 @@ public class AlarmActivity extends Activity implements SensorEventListener {
         return total / luxSampleCount;
     }
 
+    private void updateSnoozeButton() {
+        AlarmConfig alarm = AlarmStore.getAlarm(this, alarmId);
+        boolean canSnooze = alarm != null && alarm.hasSnoozesRemaining();
+        snoozeButton.setVisibility(canSnooze ? View.VISIBLE : View.GONE);
+        if (canSnooze) {
+            snoozeButton.setText(String.format(
+                    Locale.getDefault(),
+                    "Snooze %d min (%d left)",
+                    alarm.snoozeMinutes,
+                    alarm.snoozesRemaining()
+            ));
+        }
+    }
+
+    private void snoozeAlarmAndFinish() {
+        if (stopped) {
+            return;
+        }
+
+        AlarmConfig alarm = AlarmStore.getAlarm(this, alarmId);
+        if (alarm == null || !alarm.hasSnoozesRemaining()) {
+            updateSnoozeButton();
+            Toast.makeText(this, "No snoozes left. Use light to stop the alarm.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        if (!AlarmScheduler.canScheduleExactAlarms(this)) {
+            Toast.makeText(this, "Snooze needs Alarms & reminders permission.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        int previousSnoozesUsed = alarm.snoozesUsed;
+        long previousSnoozeUntil = alarm.snoozeUntilMillis;
+        boolean previousEnabled = alarm.enabled;
+        long snoozeUntil = alarm.markSnoozed(System.currentTimeMillis());
+        if (snoozeUntil <= 0L || !AlarmScheduler.scheduleSnooze(this, alarm, snoozeUntil)) {
+            alarm.snoozesUsed = previousSnoozesUsed;
+            alarm.snoozeUntilMillis = previousSnoozeUntil;
+            alarm.enabled = previousEnabled;
+            AlarmStore.saveAlarm(this, alarm);
+            Toast.makeText(this, "Could not schedule snooze.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        AlarmStore.saveAlarm(this, alarm);
+        stopped = true;
+        handler.removeCallbacks(progressUpdater);
+        stopAlarmService();
+        Toast.makeText(this, "Snoozed until " + AlarmPreferences.formatDateTime(this, snoozeUntil), Toast.LENGTH_SHORT).show();
+        finishAndRemoveTask();
+    }
+
     private void stopAlarmAndFinish() {
         if (stopped) {
             return;
@@ -254,11 +322,30 @@ public class AlarmActivity extends Activity implements SensorEventListener {
 
         stopped = true;
         handler.removeCallbacks(progressUpdater);
+        persistDismissal();
+        stopAlarmService();
+        finishAndRemoveTask();
+    }
+
+    private void persistDismissal() {
+        AlarmConfig alarm = AlarmStore.getAlarm(this, alarmId);
+        if (alarm == null) {
+            return;
+        }
+
+        alarm.clearSnoozeSession();
+        if (!alarm.isRepeating()) {
+            alarm.enabled = false;
+            AlarmScheduler.cancel(this, alarm.id);
+        }
+        AlarmStore.saveAlarm(this, alarm);
+    }
+
+    private void stopAlarmService() {
         Intent intent = new Intent(this, AlarmRingingService.class);
         intent.setAction(AlarmRingingService.ACTION_STOP);
         intent.putExtra(AlarmScheduler.EXTRA_ALARM_ID, alarmId);
         startService(intent);
-        finishAndRemoveTask();
     }
 
     private TextView text(String value, int sp, int style, int color) {
