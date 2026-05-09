@@ -14,9 +14,14 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.media.AudioAttributes;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -34,6 +39,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 
@@ -55,9 +61,10 @@ public class MainActivity extends Activity implements SensorEventListener {
     private NumberPicker hourPicker;
     private NumberPicker minutePicker;
     private SeekBar thresholdSeekBar;
-    private Switch repeatSwitch;
+    private Button[] dayButtons;
     private TextView thresholdValueText;
     private TextView currentLightText;
+    private TextView calibrationStatusText;
     private TextView sensorStatusText;
     private TextView alarmStatusText;
     private TextView permissionStatusText;
@@ -70,8 +77,15 @@ public class MainActivity extends Activity implements SensorEventListener {
     private SensorManager sensorManager;
     private Sensor lightSensor;
     private long editingAlarmId = NO_EDITING_ALARM;
+    private int selectedRepeatDays = AlarmPreferences.DAYS_ALL;
     private String selectedRingtoneUri;
     private String selectedRingtoneName;
+    private float latestLux = -1f;
+    private Float darkLuxSample;
+    private Float brightLuxSample;
+    private MediaPlayer previewPlayer;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable stopPreviewRunnable = this::stopPreview;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -103,6 +117,7 @@ public class MainActivity extends Activity implements SensorEventListener {
     @Override
     protected void onPause() {
         unregisterLightPreview();
+        stopPreview();
         super.onPause();
     }
 
@@ -133,7 +148,8 @@ public class MainActivity extends Activity implements SensorEventListener {
             return;
         }
 
-        currentLightText.setText(String.format(Locale.getDefault(), "%.0f lux", event.values[0]));
+        latestLux = event.values[0];
+        currentLightText.setText(String.format(Locale.getDefault(), "%.0f lux", latestLux));
     }
 
     @Override
@@ -216,12 +232,22 @@ public class MainActivity extends Activity implements SensorEventListener {
         timeRow.addView(minutePicker, new LinearLayout.LayoutParams(0, dp(126), 1));
         formPanel.addView(timeRow, blockParams(4));
 
-        repeatSwitch = new Switch(this);
-        repeatSwitch.setText(R.string.repeat_every_day);
-        repeatSwitch.setTextColor(textColor);
-        repeatSwitch.setTextSize(15);
-        repeatSwitch.setPadding(0, dp(8), 0, 0);
-        formPanel.addView(repeatSwitch);
+        formPanel.addView(label("Repeat days"));
+        LinearLayout dayRow = new LinearLayout(this);
+        dayRow.setOrientation(LinearLayout.HORIZONTAL);
+        dayButtons = new Button[AlarmPreferences.DAY_LABELS.length];
+        for (int index = 0; index < AlarmPreferences.DAY_LABELS.length; index++) {
+            final int dayIndex = index;
+            Button dayButton = miniButton(AlarmPreferences.DAY_LABELS[index], neonCyan);
+            dayButton.setOnClickListener(view -> toggleDay(dayIndex));
+            LinearLayout.LayoutParams dayParams = new LinearLayout.LayoutParams(0, dp(42), 1);
+            if (index > 0) {
+                dayParams.setMarginStart(dp(4));
+            }
+            dayRow.addView(dayButton, dayParams);
+            dayButtons[index] = dayButton;
+        }
+        formPanel.addView(dayRow, blockParams(4));
 
         formPanel.addView(label("Ringtone"));
         LinearLayout ringtoneRow = new LinearLayout(this);
@@ -229,6 +255,11 @@ public class MainActivity extends Activity implements SensorEventListener {
         ringtoneRow.setGravity(Gravity.CENTER_VERTICAL);
         selectedRingtoneText = text(AlarmConfig.DEFAULT_RINGTONE_LABEL, 14, Typeface.BOLD, textColor);
         ringtoneRow.addView(selectedRingtoneText, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button previewRingtoneButton = miniButton("Play", neonCyan);
+        previewRingtoneButton.setOnClickListener(view -> previewRingtone());
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(dp(80), dp(42));
+        previewParams.setMarginEnd(dp(8));
+        ringtoneRow.addView(previewRingtoneButton, previewParams);
         Button chooseRingtoneButton = miniButton("Audio", neonAmber);
         chooseRingtoneButton.setOnClickListener(view -> chooseRingtone());
         ringtoneRow.addView(chooseRingtoneButton, new LinearLayout.LayoutParams(dp(96), dp(42)));
@@ -259,6 +290,29 @@ public class MainActivity extends Activity implements SensorEventListener {
         formPanel.addView(thresholdSeekBar, blockParams(6));
         formPanel.addView(text("Range: 0-500 lux", 13, Typeface.NORMAL, mutedColor));
 
+        formPanel.addView(label("Calibration"));
+        LinearLayout calibrationRow = new LinearLayout(this);
+        calibrationRow.setOrientation(LinearLayout.HORIZONTAL);
+        Button darkButton = miniButton("Dark", neonMagenta);
+        darkButton.setOnClickListener(view -> sampleDarkRoom());
+        Button brightButton = miniButton("Lights", neonAmber);
+        brightButton.setOnClickListener(view -> sampleBrightRoom());
+        Button applyButton = miniButton("Apply", neonCyan);
+        applyButton.setOnClickListener(view -> applyCalibration());
+        LinearLayout.LayoutParams calibrationButtonParams = new LinearLayout.LayoutParams(0, dp(42), 1);
+        calibrationButtonParams.setMarginEnd(dp(6));
+        calibrationRow.addView(darkButton, calibrationButtonParams);
+        LinearLayout.LayoutParams brightParams = new LinearLayout.LayoutParams(0, dp(42), 1);
+        brightParams.setMarginStart(dp(3));
+        brightParams.setMarginEnd(dp(3));
+        calibrationRow.addView(brightButton, brightParams);
+        LinearLayout.LayoutParams applyParams = new LinearLayout.LayoutParams(0, dp(42), 1);
+        applyParams.setMarginStart(dp(6));
+        calibrationRow.addView(applyButton, applyParams);
+        formPanel.addView(calibrationRow, blockParams(4));
+        calibrationStatusText = text("Sample dark room and lights-on readings.", 13, Typeface.NORMAL, mutedColor);
+        formPanel.addView(calibrationStatusText, blockParams(6));
+
         currentLightText = text("-- lux", 22, Typeface.BOLD, neonAmber);
         currentLightText.setGravity(Gravity.CENTER_HORIZONTAL);
         currentLightText.setPadding(0, dp(12), 0, 0);
@@ -287,7 +341,8 @@ public class MainActivity extends Activity implements SensorEventListener {
         formTitleText.setText(R.string.form_new_alarm);
         hourPicker.setValue(AlarmPreferences.DEFAULT_HOUR);
         minutePicker.setValue(AlarmPreferences.DEFAULT_MINUTE);
-        repeatSwitch.setChecked(true);
+        selectedRepeatDays = AlarmPreferences.DAYS_ALL;
+        updateDayButtons();
         selectedRingtoneUri = null;
         selectedRingtoneName = null;
         updateSelectedRingtone();
@@ -299,7 +354,8 @@ public class MainActivity extends Activity implements SensorEventListener {
         formTitleText.setText(R.string.form_edit_alarm);
         hourPicker.setValue(alarm.hour);
         minutePicker.setValue(alarm.minute);
-        repeatSwitch.setChecked(alarm.repeatDaily);
+        selectedRepeatDays = alarm.repeatDays;
+        updateDayButtons();
         selectedRingtoneUri = alarm.ringtoneUri;
         selectedRingtoneName = alarm.ringtoneName;
         updateSelectedRingtone();
@@ -312,7 +368,8 @@ public class MainActivity extends Activity implements SensorEventListener {
                 hourPicker.getValue(),
                 minutePicker.getValue(),
                 true,
-                repeatSwitch.isChecked(),
+                selectedRepeatDays,
+                0L,
                 currentThresholdLux(),
                 selectedRingtoneUri,
                 selectedRingtoneName
@@ -400,9 +457,12 @@ public class MainActivity extends Activity implements SensorEventListener {
         topRow.addView(enabledSwitch);
         card.addView(topRow);
 
-        String repeat = getString(alarm.repeatDaily ? R.string.repeat_daily : R.string.repeat_once);
+        String repeat = alarm.repeatLabel();
         String next = alarm.enabled ? AlarmPreferences.formatDateTime(this, alarm.nextTriggerMillis()) : "Off";
         card.addView(text(repeat + " / Next: " + next, 13, Typeface.NORMAL, mutedColor), blockParams(6));
+        if (alarm.skipNextTriggerMillis > 0L) {
+            card.addView(text("Skipped: " + AlarmPreferences.formatDateTime(this, alarm.skipNextTriggerMillis), 13, Typeface.NORMAL, neonAmber), blockParams(4));
+        }
         card.addView(text("Light target: " + alarm.thresholdLux + " lux", 13, Typeface.NORMAL, neonCyan), blockParams(4));
         card.addView(text("Tone: " + alarm.ringtoneLabel(), 13, Typeface.NORMAL, mutedColor), blockParams(4));
 
@@ -410,13 +470,21 @@ public class MainActivity extends Activity implements SensorEventListener {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         Button editButton = miniButton("Edit", neonAmber);
         editButton.setOnClickListener(view -> loadAlarmIntoForm(alarm));
+        Button skipButton = miniButton("Skip", neonCyan);
+        skipButton.setEnabled(alarm.enabled);
+        skipButton.setAlpha(alarm.enabled ? 1.0f : 0.45f);
+        skipButton.setOnClickListener(view -> skipNextAlarm(alarm));
         Button deleteButton = miniButton("Delete", dangerColor);
         deleteButton.setOnClickListener(view -> deleteAlarm(alarm));
         LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(0, dp(42), 1);
-        editParams.setMarginEnd(dp(8));
+        editParams.setMarginEnd(dp(6));
         actions.addView(editButton, editParams);
+        LinearLayout.LayoutParams skipParams = new LinearLayout.LayoutParams(0, dp(42), 1);
+        skipParams.setMarginStart(dp(3));
+        skipParams.setMarginEnd(dp(3));
+        actions.addView(skipButton, skipParams);
         LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(0, dp(42), 1);
-        deleteParams.setMarginStart(dp(8));
+        deleteParams.setMarginStart(dp(6));
         actions.addView(deleteButton, deleteParams);
         card.addView(actions, blockParams(12));
 
@@ -434,6 +502,35 @@ public class MainActivity extends Activity implements SensorEventListener {
         Toast.makeText(this, "Alarm deleted", Toast.LENGTH_SHORT).show();
     }
 
+    private void skipNextAlarm(AlarmConfig alarm) {
+        if (!alarm.enabled) {
+            return;
+        }
+
+        long skippedTrigger = AlarmPreferences.nextTriggerMillis(alarm.hour, alarm.minute, alarm.repeatDays, 0L, System.currentTimeMillis());
+        if (!alarm.isRepeating()) {
+            AlarmScheduler.cancel(this, alarm.id);
+            alarm.enabled = false;
+            alarm.skipNextTriggerMillis = 0L;
+            AlarmStore.saveAlarm(this, alarm);
+            updateAlarmList();
+            updateAlarmStatus();
+            Toast.makeText(this, "One-time alarm skipped and turned off.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        alarm.skipNextTriggerMillis = skippedTrigger;
+        long nextTrigger = alarm.nextTriggerMillis();
+        if (AlarmScheduler.schedule(this, alarm, nextTrigger)) {
+            AlarmStore.saveAlarm(this, alarm);
+            updateAlarmList();
+            updateAlarmStatus();
+            Toast.makeText(this, "Skipped " + AlarmPreferences.formatDateTime(this, skippedTrigger), Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this, "Could not reschedule alarm.", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void updateAlarmStatus() {
         List<AlarmConfig> alarms = AlarmStore.getAlarms(this);
         int enabledCount = 0;
@@ -448,6 +545,71 @@ public class MainActivity extends Activity implements SensorEventListener {
                 alarms.size(),
                 enabledCount
         ));
+    }
+
+    private void toggleDay(int dayIndex) {
+        int dayBit = 1 << dayIndex;
+        selectedRepeatDays ^= dayBit;
+        selectedRepeatDays &= AlarmPreferences.DAYS_ALL;
+        updateDayButtons();
+    }
+
+    private void updateDayButtons() {
+        if (dayButtons == null) {
+            return;
+        }
+
+        for (int index = 0; index < dayButtons.length; index++) {
+            boolean selected = (selectedRepeatDays & (1 << index)) != 0;
+            dayButtons[index].setTextColor(selected ? backgroundColor : textColor);
+            dayButtons[index].setBackground(strokedBackground(
+                    selected ? neonCyan : Color.TRANSPARENT,
+                    selected ? neonMagenta : neonCyan,
+                    8,
+                    1
+            ));
+        }
+    }
+
+    private void sampleDarkRoom() {
+        if (!hasLiveLux()) {
+            Toast.makeText(this, "Waiting for a light sensor reading.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        darkLuxSample = latestLux;
+        updateCalibrationStatus();
+    }
+
+    private void sampleBrightRoom() {
+        if (!hasLiveLux()) {
+            Toast.makeText(this, "Waiting for a light sensor reading.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        brightLuxSample = latestLux;
+        updateCalibrationStatus();
+    }
+
+    private void applyCalibration() {
+        if (darkLuxSample == null || brightLuxSample == null) {
+            Toast.makeText(this, "Sample both dark and lights-on readings first.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        float low = Math.min(darkLuxSample, brightLuxSample);
+        float high = Math.max(darkLuxSample, brightLuxSample);
+        int recommended = AlarmPreferences.clampThreshold(Math.round(low + (high - low) * 0.55f));
+        setThresholdLux(recommended);
+        calibrationStatusText.setText(String.format(Locale.getDefault(), "Recommended target applied: %d lux", recommended));
+    }
+
+    private void updateCalibrationStatus() {
+        String dark = darkLuxSample == null ? "--" : String.format(Locale.getDefault(), "%.0f", darkLuxSample);
+        String bright = brightLuxSample == null ? "--" : String.format(Locale.getDefault(), "%.0f", brightLuxSample);
+        calibrationStatusText.setText("Dark: " + dark + " lux / Lights: " + bright + " lux");
+    }
+
+    private boolean hasLiveLux() {
+        return latestLux >= 0f;
     }
 
     private void updateSensorStatus() {
@@ -520,6 +682,51 @@ public class MainActivity extends Activity implements SensorEventListener {
         intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg"});
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(intent, REQUEST_RINGTONE);
+    }
+
+    private void previewRingtone() {
+        Uri previewUri = selectedRingtoneUri == null
+                ? RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                : Uri.parse(selectedRingtoneUri);
+        if (previewUri == null) {
+            previewUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+        }
+        if (previewUri == null) {
+            Toast.makeText(this, "No preview sound available.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        stopPreview();
+        try {
+            previewPlayer = new MediaPlayer();
+            previewPlayer.setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build());
+            previewPlayer.setDataSource(this, previewUri);
+            previewPlayer.setLooping(false);
+            previewPlayer.prepare();
+            previewPlayer.start();
+            handler.postDelayed(stopPreviewRunnable, 12_000L);
+        } catch (IOException | RuntimeException exception) {
+            stopPreview();
+            Toast.makeText(this, "Could not preview this audio file.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void stopPreview() {
+        handler.removeCallbacks(stopPreviewRunnable);
+        if (previewPlayer == null) {
+            return;
+        }
+        try {
+            if (previewPlayer.isPlaying()) {
+                previewPlayer.stop();
+            }
+        } catch (IllegalStateException ignored) {
+        }
+        previewPlayer.release();
+        previewPlayer = null;
     }
 
     private String displayNameForUri(Uri uri) {

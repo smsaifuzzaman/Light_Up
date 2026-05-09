@@ -28,8 +28,17 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Validate tag version
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName "\K[^"]+' app/build.gradle)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION_NAME" != "$TAG_VERSION" ]; then
+            echo "Tag v$TAG_VERSION does not match Android versionName $VERSION_NAME"
+            exit 1
+          fi
+
       - name: Build APK
-        run: ./gradlew assembleDebug lintDebug
+        run: ./gradlew testDebugUnitTest assembleDebug lintDebug
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

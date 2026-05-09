@@ -49,6 +49,9 @@ public class AlarmActivity extends Activity implements SensorEventListener {
     private long alarmId = -1L;
     private long aboveThresholdSince = -1L;
     private boolean stopped;
+    private final float[] luxSamples = new float[8];
+    private int luxSampleIndex;
+    private int luxSampleCount;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable progressUpdater = new Runnable() {
@@ -109,7 +112,7 @@ public class AlarmActivity extends Activity implements SensorEventListener {
             return;
         }
 
-        float lux = event.values[0];
+        float lux = smoothedLux(event.values[0]);
         currentLuxText.setText(String.format(Locale.getDefault(), "%.0f lux", lux));
 
         if (lux >= thresholdLux) {
@@ -120,7 +123,7 @@ public class AlarmActivity extends Activity implements SensorEventListener {
                 handler.post(progressUpdater);
             }
             updateHoldProgress(SystemClock.elapsedRealtime());
-        } else {
+        } else if (lux < Math.max(0, thresholdLux - 10)) {
             aboveThresholdSince = -1L;
             progressBar.setProgress(0);
             statusText.setText(R.string.alarm_waiting_for_light);
@@ -230,6 +233,18 @@ public class AlarmActivity extends Activity implements SensorEventListener {
         if (progress >= AlarmPreferences.REQUIRED_LIGHT_MS) {
             stopAlarmAndFinish();
         }
+    }
+
+    private float smoothedLux(float latestLux) {
+        luxSamples[luxSampleIndex] = latestLux;
+        luxSampleIndex = (luxSampleIndex + 1) % luxSamples.length;
+        luxSampleCount = Math.min(luxSampleCount + 1, luxSamples.length);
+
+        float total = 0f;
+        for (int index = 0; index < luxSampleCount; index++) {
+            total += luxSamples[index];
+        }
+        return total / luxSampleCount;
     }
 
     private void stopAlarmAndFinish() {

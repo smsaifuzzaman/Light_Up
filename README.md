@@ -18,11 +18,12 @@ After downloading `LightUp-debug.apk`, open the downloaded file on the Android d
 - Runs fully offline and does not request internet permission.
 - Uses Android's `AlarmManager.setAlarmClock` API for user-visible alarms.
 - Rings through a foreground service with alarm audio, vibration, wake lock, and a full-screen alarm screen.
-- Stops after the configured light threshold is held for 3 seconds.
+- Stops after the configured light threshold is held for 3 seconds, with smoothed sensor readings to reduce flicker.
 - Supports multiple alarms.
 - Uses digital time controls instead of an analog clock picker.
-- Supports custom alarm audio by selecting an MP3 or other audio file from the device.
-- Configurable alarm time, daily repeat, and light threshold from 0-500 lux.
+- Supports custom alarm audio by selecting an MP3 or other audio file from the device, including ringtone preview.
+- Configurable alarm time, weekday repeats, skip-next, and light threshold from 0-500 lux.
+- Guided light calibration can sample a dark room and lights-on reading, then apply a recommended threshold.
 - Reschedules enabled alarms after reboot, app update, time change, or time zone change.
 - Manual long-press fallback for devices without an ambient light sensor.
 
@@ -51,6 +52,12 @@ On Windows PowerShell:
 .\gradlew.bat assembleDebug
 ```
 
+The repository also includes a PowerShell helper that uses the bundled local JDK and Android SDK when those folders exist:
+
+```powershell
+.\scripts\build.ps1 -Variant Debug -Test -Lint
+```
+
 The debug APK will be created at:
 
 ```text
@@ -70,8 +77,9 @@ adb install app/build/outputs/apk/debug/LightUp-debug.apk
 3. Allow **Alarms & reminders** if Android asks. Light Up uses this for exact alarm times.
 4. On Android 14 or newer, use **Alarm display settings** if the app says full-screen alarm display is disabled.
 5. Pick an alarm time.
-6. Choose a light target. `180 lux` is a good starting point; bright room lighting can be `300 lux` or higher.
-7. Tap **Set alarm**.
+6. Choose repeat days. Leaving every day off creates a one-time alarm.
+7. Choose a light target manually, or use **Calibration** to sample dark and lights-on readings.
+8. Tap **Set alarm**.
 
 When the alarm rings, turn on a light or shine light at the top edge of the phone until the progress bar fills.
 
@@ -90,11 +98,15 @@ app/src/main/java/com/lightup/alarm/
   AlarmScheduler.java          Alarm scheduling and cancellation
   AlarmPreferences.java        Local alarm settings
   BootReceiver.java            Alarm rescheduling after system events
+app/src/test/java/com/lightup/alarm/
+  AlarmPreferencesTest.java    Scheduling and repeat-rule unit tests
+scripts/
+  build.ps1                    Windows helper for local builds
 ```
 
 ## Contributing
 
-Issues and pull requests are welcome. Useful areas for future work include unit tests around scheduling logic, accessibility polish, translations, and better device-specific light sensor calibration.
+Issues and pull requests are welcome. Useful areas for future work include accessibility polish, translations, release signing, DataStore or Room storage, and better device-specific light sensor calibration.
 
 ## License
 

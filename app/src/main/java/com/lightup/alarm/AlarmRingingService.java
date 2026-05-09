@@ -12,10 +12,13 @@ import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.widget.Toast;
 
 import java.io.IOException;
 
@@ -160,6 +163,9 @@ public class AlarmRingingService extends Service {
                 : Uri.parse(activeAlarm.ringtoneUri);
         if (customUri != null && startSoundForUri(customUri)) {
             return;
+        } else if (customUri != null) {
+            new Handler(Looper.getMainLooper()).post(() ->
+                    Toast.makeText(this, "Custom alarm audio unavailable. Using system alarm sound.", Toast.LENGTH_LONG).show());
         }
 
         Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);

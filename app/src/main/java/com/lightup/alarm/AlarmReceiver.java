@@ -18,9 +18,11 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
 
-        if (alarm.repeatDaily) {
+        alarm.skipNextTriggerMillis = 0L;
+        if (alarm.isRepeating()) {
             long nextTrigger = alarm.nextTriggerMillis(System.currentTimeMillis() + 60_000L);
             AlarmScheduler.schedule(context, alarm, nextTrigger);
+            AlarmStore.saveAlarm(context, alarm);
         } else {
             alarm.enabled = false;
             AlarmStore.saveAlarm(context, alarm);

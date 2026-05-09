@@ -11,6 +11,8 @@ final class AlarmConfig {
     private static final String KEY_MINUTE = "minute";
     private static final String KEY_ENABLED = "enabled";
     private static final String KEY_REPEAT_DAILY = "repeat_daily";
+    private static final String KEY_REPEAT_DAYS = "repeat_days";
+    private static final String KEY_SKIP_NEXT_TRIGGER = "skip_next_trigger";
     private static final String KEY_THRESHOLD_LUX = "threshold_lux";
     private static final String KEY_RINGTONE_URI = "ringtone_uri";
     private static final String KEY_RINGTONE_NAME = "ringtone_name";
@@ -19,7 +21,8 @@ final class AlarmConfig {
     int hour;
     int minute;
     boolean enabled;
-    boolean repeatDaily;
+    int repeatDays;
+    long skipNextTriggerMillis;
     int thresholdLux;
     String ringtoneUri;
     String ringtoneName;
@@ -34,11 +37,36 @@ final class AlarmConfig {
             String ringtoneUri,
             String ringtoneName
     ) {
+        this(
+                id,
+                hour,
+                minute,
+                enabled,
+                repeatDaily ? AlarmPreferences.DAYS_ALL : AlarmPreferences.DAYS_NONE,
+                0L,
+                thresholdLux,
+                ringtoneUri,
+                ringtoneName
+        );
+    }
+
+    AlarmConfig(
+            long id,
+            int hour,
+            int minute,
+            boolean enabled,
+            int repeatDays,
+            long skipNextTriggerMillis,
+            int thresholdLux,
+            String ringtoneUri,
+            String ringtoneName
+    ) {
         this.id = id;
         this.hour = clampHour(hour);
         this.minute = clampMinute(minute);
         this.enabled = enabled;
-        this.repeatDaily = repeatDaily;
+        this.repeatDays = repeatDays & AlarmPreferences.DAYS_ALL;
+        this.skipNextTriggerMillis = Math.max(0L, skipNextTriggerMillis);
         this.thresholdLux = AlarmPreferences.clampThreshold(thresholdLux);
         this.ringtoneUri = emptyToNull(ringtoneUri);
         this.ringtoneName = emptyToNull(ringtoneName);
@@ -50,7 +78,8 @@ final class AlarmConfig {
                 AlarmPreferences.DEFAULT_HOUR,
                 AlarmPreferences.DEFAULT_MINUTE,
                 true,
-                true,
+                AlarmPreferences.DAYS_ALL,
+                0L,
                 AlarmPreferences.DEFAULT_THRESHOLD_LUX,
                 null,
                 null
@@ -58,12 +87,18 @@ final class AlarmConfig {
     }
 
     static AlarmConfig fromJson(JSONObject jsonObject) throws JSONException {
+        int repeatDays = jsonObject.has(KEY_REPEAT_DAYS)
+                ? jsonObject.optInt(KEY_REPEAT_DAYS, AlarmPreferences.DAYS_ALL)
+                : (jsonObject.optBoolean(KEY_REPEAT_DAILY, true)
+                        ? AlarmPreferences.DAYS_ALL
+                        : AlarmPreferences.DAYS_NONE);
         return new AlarmConfig(
                 jsonObject.getLong(KEY_ID),
                 jsonObject.optInt(KEY_HOUR, AlarmPreferences.DEFAULT_HOUR),
                 jsonObject.optInt(KEY_MINUTE, AlarmPreferences.DEFAULT_MINUTE),
                 jsonObject.optBoolean(KEY_ENABLED, true),
-                jsonObject.optBoolean(KEY_REPEAT_DAILY, true),
+                repeatDays,
+                jsonObject.optLong(KEY_SKIP_NEXT_TRIGGER, 0L),
                 jsonObject.optInt(KEY_THRESHOLD_LUX, AlarmPreferences.DEFAULT_THRESHOLD_LUX),
                 jsonObject.optString(KEY_RINGTONE_URI, null),
                 jsonObject.optString(KEY_RINGTONE_NAME, null)
@@ -76,7 +111,9 @@ final class AlarmConfig {
         jsonObject.put(KEY_HOUR, hour);
         jsonObject.put(KEY_MINUTE, minute);
         jsonObject.put(KEY_ENABLED, enabled);
-        jsonObject.put(KEY_REPEAT_DAILY, repeatDaily);
+        jsonObject.put(KEY_REPEAT_DAILY, isDaily());
+        jsonObject.put(KEY_REPEAT_DAYS, repeatDays);
+        jsonObject.put(KEY_SKIP_NEXT_TRIGGER, skipNextTriggerMillis);
         jsonObject.put(KEY_THRESHOLD_LUX, thresholdLux);
         jsonObject.put(KEY_RINGTONE_URI, ringtoneUri);
         jsonObject.put(KEY_RINGTONE_NAME, ringtoneName);
@@ -84,15 +121,43 @@ final class AlarmConfig {
     }
 
     long nextTriggerMillis() {
-        return AlarmPreferences.nextTriggerMillis(hour, minute, System.currentTimeMillis());
+        long trigger = AlarmPreferences.nextTriggerMillis(hour, minute, repeatDays, skipNextTriggerMillis, System.currentTimeMillis());
+        clearExpiredSkip(trigger);
+        return trigger;
     }
 
     long nextTriggerMillis(long fromMillis) {
-        return AlarmPreferences.nextTriggerMillis(hour, minute, fromMillis);
+        long trigger = AlarmPreferences.nextTriggerMillis(hour, minute, repeatDays, skipNextTriggerMillis, fromMillis);
+        clearExpiredSkip(trigger);
+        return trigger;
     }
 
     String ringtoneLabel() {
         return ringtoneName == null ? DEFAULT_RINGTONE_LABEL : ringtoneName;
+    }
+
+    boolean isRepeating() {
+        return (repeatDays & AlarmPreferences.DAYS_ALL) != AlarmPreferences.DAYS_NONE;
+    }
+
+    boolean isDaily() {
+        return (repeatDays & AlarmPreferences.DAYS_ALL) == AlarmPreferences.DAYS_ALL;
+    }
+
+    String repeatLabel() {
+        return AlarmPreferences.formatRepeatDays(repeatDays);
+    }
+
+    void clearExpiredSkip(long currentNextTriggerMillis) {
+        if (skipNextTriggerMillis > 0L && skipNextTriggerMillis < System.currentTimeMillis() - 60_000L) {
+            skipNextTriggerMillis = 0L;
+        }
+    }
+
+    long markSkipNext() {
+        long nextTrigger = AlarmPreferences.nextTriggerMillis(hour, minute, repeatDays, 0L, System.currentTimeMillis());
+        skipNextTriggerMillis = nextTrigger;
+        return nextTriggerMillis();
     }
 
     private static int clampHour(int hour) {
