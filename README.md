@@ -1,22 +1,20 @@
 # Light Up
 
-Light Up is an offline Android alarm app that keeps ringing until the phone's ambient light sensor sees enough light. The intended wake-up flow is simple: set an alarm, leave the phone near you, then turn on a room light or shine light near the top edge of the screen to dismiss it.
+Light Up is an Android alarm app that keeps ringing until the phone detects enough light through its ambient light sensor. It is designed for people who want a wake-up routine that makes them turn on a room light before the alarm stops.
 
-## Download on Android
+## Download
 
-Download the latest APK directly on an Android phone:
+The latest Android build is available from the GitHub release:
 
 ```text
 https://github.com/smsaifuzzaman/Light_Up/releases/latest/download/LightUp-debug.apk
 ```
 
-Open the link on the phone, download `LightUp-debug.apk`, then tap the downloaded file to install it. Android may ask you to allow installing unknown apps from the browser or file manager.
-
-Android phones do not install `.exe` files. The Android install file is an `.apk`. No PC, laptop, emulator, Android Studio, account, or login is required to install and use the downloaded APK.
+After downloading `LightUp-debug.apk`, open the downloaded file on the Android device and follow the installation prompt. Android may ask for permission to install apps from the browser or file manager.
 
 ## Features
 
-- Offline alarm app with no account, backend, analytics, or internet permission.
+- Runs fully offline and does not request internet permission.
 - Uses Android's `AlarmManager.setAlarmClock` API for user-visible alarms.
 - Rings through a foreground service with alarm audio, vibration, wake lock, and a full-screen alarm screen.
 - Stops after the configured light threshold is held for 3 seconds.
@@ -24,22 +22,20 @@ Android phones do not install `.exe` files. The Android install file is an `.apk
 - Reschedules enabled alarms after reboot, app update, time change, or time zone change.
 - Manual long-press fallback for devices without an ambient light sensor.
 
-## Requirements
+## GitHub Release
+
+Each tagged release attaches `LightUp-debug.apk`. Maintainers can publish a new downloadable build by pushing a version tag such as `v0.1.0`.
+
+## Development
+
+Build requirements:
 
 - Android Studio or Android SDK command-line tools.
 - JDK 17.
 - Android SDK platform 35.
-- A physical Android phone is recommended because the app depends on the phone's ambient light sensor.
+- A physical Android phone for testing light-sensor behavior.
 
-The app has no online runtime components. Gradle may download build tools when compiling the project for the first time.
-
-## GitHub Release
-
-Each tagged release attaches `LightUp-debug.apk` so Android users can download the app without building it themselves. Maintainers can publish a new downloadable APK by pushing a version tag such as `v0.1.0`.
-
-## Build
-
-From the project root:
+From the project root, build the debug APK:
 
 ```bash
 ./gradlew assembleDebug
@@ -57,7 +53,7 @@ The debug APK will be created at:
 app/build/outputs/apk/debug/LightUp-debug.apk
 ```
 
-Install it on a connected phone:
+Install the local build on a connected device:
 
 ```bash
 adb install app/build/outputs/apk/debug/LightUp-debug.apk
@@ -77,7 +73,7 @@ When the alarm rings, turn on a light or shine light at the top edge of the phon
 
 ## Privacy
 
-Light Up does not request `INTERNET`, location, contacts, camera, microphone, or account permissions. Alarm settings are stored locally in Android shared preferences.
+Light Up does not request `INTERNET`, location, contacts, camera, or microphone permissions. Alarm settings are stored locally in Android shared preferences.
 
 ## Project Structure
 
