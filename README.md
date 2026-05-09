@@ -2,6 +2,18 @@
 
 Light Up is an offline Android alarm app that keeps ringing until the phone's ambient light sensor sees enough light. The intended wake-up flow is simple: set an alarm, leave the phone near you, then turn on a room light or shine light near the top edge of the screen to dismiss it.
 
+## Download on Android
+
+Download the latest APK directly on an Android phone:
+
+```text
+https://github.com/smsaifuzzaman/Light_Up/releases/latest/download/LightUp-debug.apk
+```
+
+Open the link on the phone, download `LightUp-debug.apk`, then tap the downloaded file to install it. Android may ask you to allow installing unknown apps from the browser or file manager.
+
+Android phones do not install `.exe` files. The Android install file is an `.apk`. No PC, laptop, emulator, Android Studio, account, or login is required to install and use the downloaded APK.
+
 ## Features
 
 - Offline alarm app with no account, backend, analytics, or internet permission.
@@ -17,24 +29,13 @@ Light Up is an offline Android alarm app that keeps ringing until the phone's am
 - Android Studio or Android SDK command-line tools.
 - JDK 17.
 - Android SDK platform 35.
-- A physical Android phone is recommended because most emulators do not expose a real light sensor.
+- A physical Android phone is recommended because the app depends on the phone's ambient light sensor.
 
 The app has no online runtime components. Gradle may download build tools when compiling the project for the first time.
 
-## Download APK
+## GitHub Release
 
-Android phones do not install `.exe` files. The Android install file is an `.apk`.
-
-For GitHub downloads:
-
-1. Open the repository's **Actions** tab.
-2. Open the latest successful **Android** workflow run.
-3. Download the `LightUp-debug-apk` artifact.
-4. Extract it and install `LightUp-debug.apk` on the Android device.
-
-For public release downloads, maintainers can push a version tag such as `v0.1.0`. The release workflow will attach `LightUp-debug.apk` to the GitHub release.
-
-On the phone, Android may ask you to allow installing unknown apps from the browser or file manager before the APK can be installed.
+Each tagged release attaches `LightUp-debug.apk` so Android users can download the app without building it themselves. Maintainers can publish a new downloadable APK by pushing a version tag such as `v0.1.0`.
 
 ## Build
 
