@@ -21,6 +21,21 @@ Light Up is an offline Android alarm app that keeps ringing until the phone's am
 
 The app has no online runtime components. Gradle may download build tools when compiling the project for the first time.
 
+## Download APK
+
+Android phones do not install `.exe` files. The Android install file is an `.apk`.
+
+For GitHub downloads:
+
+1. Open the repository's **Actions** tab.
+2. Open the latest successful **Android** workflow run.
+3. Download the `LightUp-debug-apk` artifact.
+4. Extract it and install `LightUp-debug.apk` on the Android device.
+
+For public release downloads, maintainers can push a version tag such as `v0.1.0`. The release workflow will attach `LightUp-debug.apk` to the GitHub release.
+
+On the phone, Android may ask you to allow installing unknown apps from the browser or file manager before the APK can be installed.
+
 ## Build
 
 From the project root:
@@ -38,13 +53,13 @@ On Windows PowerShell:
 The debug APK will be created at:
 
 ```text
-app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/debug/LightUp-debug.apk
 ```
 
 Install it on a connected phone:
 
 ```bash
-adb install app/build/outputs/apk/debug/app-debug.apk
+adb install app/build/outputs/apk/debug/LightUp-debug.apk
 ```
 
 ## First Run

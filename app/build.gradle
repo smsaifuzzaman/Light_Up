@@ -19,3 +19,9 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
+
+android.applicationVariants.configureEach { variant ->
+    variant.outputs.configureEach {
+        outputFileName = "LightUp-${variant.name}.apk"
+    }
+}
