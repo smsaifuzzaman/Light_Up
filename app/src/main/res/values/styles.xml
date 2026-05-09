@@ -1,0 +1,20 @@
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/light_up_background</item>
+        <item name="android:colorAccent">@color/light_up_primary</item>
+        <item name="android:navigationBarColor">@color/light_up_background</item>
+        <item name="android:statusBarColor">@color/light_up_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="AlarmTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/light_up_alarm_bg</item>
+        <item name="android:colorAccent">@color/light_up_primary</item>
+        <item name="android:navigationBarColor">@color/light_up_alarm_bg</item>
+        <item name="android:statusBarColor">@color/light_up_alarm_bg</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+    </style>
+</resources>

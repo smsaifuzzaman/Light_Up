@@ -1,0 +1,19 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Android Studio
+.idea/
+*.iml
+local.properties
+captures/
+
+# Local SDK/tooling
+.android-sdk/
+.jdk/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/

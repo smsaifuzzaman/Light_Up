@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">Light Up</string>
+    <string name="notification_channel_alarm">Light Up alarms</string>
+    <string name="repeat_every_day">Repeat every day</string>
+    <string name="alarm_status_none">No alarm scheduled</string>
+    <string name="alarm_status_scheduled">%1$s alarm: %2$s</string>
+    <string name="repeat_daily">Daily</string>
+    <string name="repeat_once">Once</string>
+    <string name="sensor_missing">No ambient light sensor was found on this device.</string>
+    <string name="sensor_unavailable">Unavailable</string>
+    <string name="sensor_name">Sensor: %1$s</string>
+    <string name="alarm_no_light_sensor">No light sensor detected. Use the manual fallback.</string>
+    <string name="alarm_hold_steady">Hold steady</string>
+    <string name="alarm_waiting_for_light">Waiting for enough light</string>
+    <string name="alarm_hold_to_stop">Hold to stop</string>
+    <plurals name="threshold_lux">
+        <item quantity="one">%1$d lux</item>
+        <item quantity="other">%1$d lux</item>
+    </plurals>
+</resources>
