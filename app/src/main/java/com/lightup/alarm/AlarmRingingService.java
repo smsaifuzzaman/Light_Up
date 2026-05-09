@@ -31,6 +31,8 @@ public class AlarmRingingService extends Service {
     private PowerManager.WakeLock wakeLock;
     private Vibrator vibrator;
     private boolean ringing;
+    private AlarmConfig activeAlarm;
+    private long activeAlarmId = -1L;
 
     static void createAlarmChannel(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -71,7 +73,8 @@ public class AlarmRingingService extends Service {
             return START_NOT_STICKY;
         }
 
-        startAlarm();
+        long alarmId = intent == null ? -1L : intent.getLongExtra(AlarmScheduler.EXTRA_ALARM_ID, -1L);
+        startAlarm(alarmId);
         return START_STICKY;
     }
 
@@ -88,7 +91,9 @@ public class AlarmRingingService extends Service {
         super.onDestroy();
     }
 
-    private void startAlarm() {
+    private void startAlarm(long alarmId) {
+        activeAlarmId = alarmId;
+        activeAlarm = AlarmStore.getAlarm(this, alarmId);
         startForeground(NOTIFICATION_ID, buildNotification());
 
         if (ringing) {
@@ -104,6 +109,7 @@ public class AlarmRingingService extends Service {
 
     private Notification buildNotification() {
         Intent openIntent = new Intent(this, AlarmActivity.class);
+        openIntent.putExtra(AlarmScheduler.EXTRA_ALARM_ID, activeAlarmId);
         openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -120,7 +126,7 @@ public class AlarmRingingService extends Service {
 
         builder.setSmallIcon(R.drawable.ic_stat_alarm)
                 .setContentTitle("Light Up alarm")
-                .setContentText("Open the alarm screen to dismiss with light.")
+                .setContentText("Shine light at the phone to dismiss.")
                 .setContentIntent(openPendingIntent)
                 .setFullScreenIntent(openPendingIntent, true)
                 .setCategory(Notification.CATEGORY_ALARM)
@@ -137,6 +143,7 @@ public class AlarmRingingService extends Service {
 
     private void openAlarmScreen() {
         Intent intent = new Intent(this, AlarmActivity.class);
+        intent.putExtra(AlarmScheduler.EXTRA_ALARM_ID, activeAlarmId);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -148,26 +155,38 @@ public class AlarmRingingService extends Service {
     }
 
     private void startSound() {
+        Uri customUri = activeAlarm == null || activeAlarm.ringtoneUri == null
+                ? null
+                : Uri.parse(activeAlarm.ringtoneUri);
+        if (customUri != null && startSoundForUri(customUri)) {
+            return;
+        }
+
         Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
         if (alarmUri == null) {
             alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
         }
-        if (alarmUri == null) {
-            return;
+        if (alarmUri != null) {
+            startSoundForUri(alarmUri);
         }
+    }
 
+    private boolean startSoundForUri(Uri soundUri) {
         try {
+            stopSound();
             mediaPlayer = new MediaPlayer();
             mediaPlayer.setAudioAttributes(new AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build());
-            mediaPlayer.setDataSource(this, alarmUri);
+            mediaPlayer.setDataSource(this, soundUri);
             mediaPlayer.setLooping(true);
             mediaPlayer.prepare();
             mediaPlayer.start();
+            return true;
         } catch (IOException | RuntimeException exception) {
             stopSound();
+            return false;
         }
     }
 

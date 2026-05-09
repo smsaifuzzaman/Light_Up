@@ -31,10 +31,12 @@ import android.widget.Toast;
 import java.util.Locale;
 
 public class AlarmActivity extends Activity implements SensorEventListener {
-    private final int backgroundColor = Color.rgb(17, 24, 39);
-    private final int textColor = Color.rgb(255, 248, 232);
-    private final int mutedColor = Color.rgb(203, 213, 225);
-    private final int primaryColor = Color.rgb(245, 182, 66);
+    private final int backgroundColor = Color.rgb(7, 9, 24);
+    private final int textColor = Color.rgb(232, 248, 255);
+    private final int mutedColor = Color.rgb(139, 159, 205);
+    private final int neonCyan = Color.rgb(54, 244, 255);
+    private final int neonMagenta = Color.rgb(255, 43, 214);
+    private final int neonAmber = Color.rgb(255, 184, 0);
 
     private SensorManager sensorManager;
     private Sensor lightSensor;
@@ -44,6 +46,7 @@ public class AlarmActivity extends Activity implements SensorEventListener {
     private Button emergencyButton;
 
     private int thresholdLux;
+    private long alarmId = -1L;
     private long aboveThresholdSince = -1L;
     private boolean stopped;
 
@@ -63,7 +66,9 @@ public class AlarmActivity extends Activity implements SensorEventListener {
         super.onCreate(savedInstanceState);
         configureAlarmWindow();
 
-        thresholdLux = AlarmPreferences.getThresholdLux(this);
+        alarmId = getIntent().getLongExtra(AlarmScheduler.EXTRA_ALARM_ID, -1L);
+        AlarmConfig alarm = AlarmStore.getAlarm(this, alarmId);
+        thresholdLux = alarm == null ? AlarmPreferences.DEFAULT_THRESHOLD_LUX : alarm.thresholdLux;
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
             lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
@@ -137,7 +142,7 @@ public class AlarmActivity extends Activity implements SensorEventListener {
         Space topSpace = new Space(this);
         root.addView(topSpace, new LinearLayout.LayoutParams(1, 0, 0.45f));
 
-        TextView title = text("Light Up", 42, Typeface.BOLD, textColor);
+        TextView title = text("LIGHT UP", 42, Typeface.BOLD, textColor);
         title.setGravity(Gravity.CENTER_HORIZONTAL);
         root.addView(title, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -149,7 +154,7 @@ public class AlarmActivity extends Activity implements SensorEventListener {
         target.setPadding(0, dp(8), 0, dp(22));
         root.addView(target);
 
-        currentLuxText = text("-- lux", 48, Typeface.BOLD, primaryColor);
+        currentLuxText = text("-- lux", 52, Typeface.BOLD, neonAmber);
         currentLuxText.setGravity(Gravity.CENTER_HORIZONTAL);
         root.addView(currentLuxText);
 
@@ -236,6 +241,7 @@ public class AlarmActivity extends Activity implements SensorEventListener {
         handler.removeCallbacks(progressUpdater);
         Intent intent = new Intent(this, AlarmRingingService.class);
         intent.setAction(AlarmRingingService.ACTION_STOP);
+        intent.putExtra(AlarmScheduler.EXTRA_ALARM_ID, alarmId);
         startService(intent);
         finishAndRemoveTask();
     }
@@ -253,7 +259,7 @@ public class AlarmActivity extends Activity implements SensorEventListener {
     private GradientDrawable buttonBackground() {
         GradientDrawable background = new GradientDrawable();
         background.setColor(Color.TRANSPARENT);
-        background.setStroke(dp(1), Color.rgb(71, 85, 105));
+        background.setStroke(dp(1), neonMagenta);
         background.setCornerRadius(dp(8));
         return background;
     }

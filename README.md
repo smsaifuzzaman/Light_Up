@@ -14,11 +14,15 @@ After downloading `LightUp-debug.apk`, open the downloaded file on the Android d
 
 ## Features
 
+- Dark cyberpunk interface with the custom Light Up icon.
 - Runs fully offline and does not request internet permission.
 - Uses Android's `AlarmManager.setAlarmClock` API for user-visible alarms.
 - Rings through a foreground service with alarm audio, vibration, wake lock, and a full-screen alarm screen.
 - Stops after the configured light threshold is held for 3 seconds.
-- Configurable alarm time, daily repeat, and light threshold.
+- Supports multiple alarms.
+- Uses digital time controls instead of an analog clock picker.
+- Supports custom alarm audio by selecting an MP3 or other audio file from the device.
+- Configurable alarm time, daily repeat, and light threshold from 0-500 lux.
 - Reschedules enabled alarms after reboot, app update, time change, or time zone change.
 - Manual long-press fallback for devices without an ambient light sensor.
 

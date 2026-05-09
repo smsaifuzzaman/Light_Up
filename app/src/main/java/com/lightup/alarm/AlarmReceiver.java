@@ -12,15 +12,23 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
 
-        if (AlarmPreferences.repeatsDaily(context)) {
-            long nextTrigger = AlarmPreferences.nextTriggerMillis(context, System.currentTimeMillis() + 60_000L);
-            AlarmScheduler.schedule(context, nextTrigger);
+        long alarmId = intent.getLongExtra(AlarmScheduler.EXTRA_ALARM_ID, -1L);
+        AlarmConfig alarm = AlarmStore.getAlarm(context, alarmId);
+        if (alarm == null || !alarm.enabled) {
+            return;
+        }
+
+        if (alarm.repeatDaily) {
+            long nextTrigger = alarm.nextTriggerMillis(System.currentTimeMillis() + 60_000L);
+            AlarmScheduler.schedule(context, alarm, nextTrigger);
         } else {
-            AlarmPreferences.disableAlarm(context);
+            alarm.enabled = false;
+            AlarmStore.saveAlarm(context, alarm);
         }
 
         Intent serviceIntent = new Intent(context, AlarmRingingService.class);
         serviceIntent.setAction(AlarmRingingService.ACTION_START);
+        serviceIntent.putExtra(AlarmScheduler.EXTRA_ALARM_ID, alarm.id);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(serviceIntent);
